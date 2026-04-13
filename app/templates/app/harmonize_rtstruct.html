@@ -1,0 +1,925 @@
+{% extends 'app/base.html' %}
+
+{% block content %}
+<!-- Messages -->
+{% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} px-4 py-3 rounded-md mb-2 {% if message.tags == 'error' %}bg-red-100 border border-red-400 text-red-700{% elif message.tags == 'success' %}bg-green-100 border border-green-400 text-green-700{% elif message.tags == 'warning' %}bg-yellow-100 border border-yellow-400 text-yellow-700{% else %}bg-blue-100 border border-blue-400 text-blue-700{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<!-- TG263 Service Status -->
+{% if not tg263_available %}
+<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6" role="alert">
+    <p class="font-bold">TG263 Service Unavailable</p>
+    <p>Basic ROI name normalization will be used. TG263 matching features are currently unavailable.</p>
+</div>
+{% endif %}
+
+<!-- Header -->
+<div class="bg-white rounded-lg shadow mb-6">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <div class="flex items-center space-x-3">
+                    <a href="{% url 'app:zip_detail' zip_id %}" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </a>
+                    <h3 class="text-lg font-semibold text-gray-900">ROI Harmonization</h3>
+                    <span class="px-2 py-1 text-xs font-medium text-purple-600 bg-purple-100 rounded-full">
+                        RTSTRUCT
+                    </span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Patient: {{ rtstruct.series_instance.series.study.patient.patient_id }} | Study: {{ rtstruct.series_instance.series.study.study_id }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Filter Controls -->
+<div class="bg-white rounded-lg shadow mb-6">
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Search Box -->
+            <div>
+                <label for="search" class="block text-sm font-medium text-gray-700 mb-2">Search ROIs</label>
+                <div class="relative">
+                    <input type="text" id="search" placeholder="Search by ROI name or number..." 
+                           class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sort By -->
+            <div>
+                <label for="sortBy" class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                <select id="sortBy" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="roi_number">ROI Number</option>
+                    <option value="roi_name">ROI Name</option>
+                    <option value="tg263_primary_name">TG263 Primary Name</option>
+                    <option value="user_modified_name">Modified Name</option>
+                </select>
+            </div>
+            
+            <!-- Sort Order -->
+            <div>
+                <label for="sortOrder" class="block text-sm font-medium text-gray-700 mb-2">Sort Order</label>
+                <select id="sortOrder" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Filter Buttons -->
+        <div class="mt-4 flex flex-wrap gap-2">
+            <button onclick="clearFilters()" class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                Clear Filters
+            </button>
+            <button onclick="showModifiedOnly()" class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200">
+                Show Modified Only
+            </button>
+            <button onclick="showUnmodifiedOnly()" class="px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-md hover:bg-yellow-200">
+                Show Unmodified Only
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ROI Harmonization Table -->
+<div class="bg-white rounded-lg shadow">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <h4 class="text-lg font-semibold text-gray-900">ROI Data</h4>
+                <p class="text-sm text-gray-500 mt-1">
+                    {% if tg263_available %}
+                    Edit the Modified Name field to harmonize ROI names. TG263 matching is available.
+                    {% else %}
+                    Edit the Modified Name field to harmonize ROI names. Basic normalization only (TG263 unavailable).
+                    {% endif %}
+                </p>
+            </div>
+            <div class="text-sm text-gray-500">
+                Total ROIs: <span id="totalCount">{{ rois.count }}</span> | 
+                Showing: <span id="visibleCount">{{ rois.count }}</span>
+            </div>
+        </div>
+    </div>
+    
+    <form method="post" action="{% url 'app:harmonize_rtstruct' rtstruct.id %}" id="harmonizeForm">
+        {% csrf_token %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200" id="roiTable">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('roi_number')">
+                            ROI Number
+                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('roi_name')">
+                            ROI Name
+                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('tg263_primary_name')">
+                            TG263 Primary Name
+                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Modified Name
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="roiTableBody">
+                    {% for roi in rois %}
+                    <tr class="roi-row"
+                        data-roi-number="{{ roi.roi_number }}"
+                        data-roi-name="{{ roi.roi_name|lower }}"
+                        data-tg263-name="{{ roi.tg263_primary_name|lower }}"
+                        data-modified-name="{{ roi.user_modified_name|lower }}"
+                        data-tg263-match="{{ roi.roi_of_clean_roi_name_match_tg263|yesno:'true,false' }}">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ roi.roi_number }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ roi.roi_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ roi.tg263_primary_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if roi.roi_of_clean_roi_name_match_tg263 %}
+                                <div class="flex items-center">
+                                    <input type="text" name="user_modified_name_{{ roi.id }}"
+                                           value="{{ roi.tg263_primary_name }}"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-700"
+                                           readonly>
+                                    <span class="ml-2 px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full">
+                                        Exact TG263 Match
+                                    </span>
+                                </div>
+                            {% else %}
+                                <div class="relative">
+                                    <div class="flex items-center">
+                                        <input type="text" name="user_modified_name_{{ roi.id }}"
+                                               value="{{ roi.user_modified_name }}"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                               placeholder="Enter TG263 primary name"
+                                               autocomplete="off"
+                                               oninput="showSuggestions(this)"
+                                               onchange="updateStatus(this)">
+                                        <div class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-gray-500 mt-1">Start typing to see TG263 primary name suggestions</div>
+                                </div>
+                            {% endif %}
+                            <input type="hidden" name="roi_id_{{ roi.id }}" value="{{ roi.id }}">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if roi.roi_of_clean_roi_name_match_tg263 %}
+                                <span class="px-2 py-1 text-xs font-medium text-blue-600 bg-blue-100 rounded-full status-badge">
+                                    TG263 Matched
+                                </span>
+                            {% elif roi.user_modified_name %}
+                                <span class="px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full status-badge">
+                                    Modified
+                                </span>
+                            {% else %}
+                                <span class="px-2 py-1 text-xs font-medium text-yellow-600 bg-yellow-100 rounded-full status-badge">
+                                    Unmodified
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-4 text-center text-gray-500">
+                            <p>No ROI data found for this RTSTRUCT.</p>
+                            <p class="text-sm mt-2">This could mean:</p>
+                            <ul class="list-disc list-inside text-sm mt-1">
+                                <li>The RTSTRUCT file has no ROIs defined</li>
+                                <li>ROIs were not properly extracted during processing</li>
+                                <li>There was an error during data extraction</li>
+                            </ul>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if rois %}
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+            <a href="{% url 'app:zip_detail' zip_id %}" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
+                Cancel
+            </a>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                Save Changes
+            </button>
+        </div>
+        {% endif %}
+    </form>
+</div>
+<!-- TG263 Suggestions -->
+<style>
+.suggestion-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+    transition: all 0.2s ease;
+}
+.suggestion-item:hover {
+    background-color: #f0f7ff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.suggestion-item.active {
+    background-color: #e0f2fe;
+    border-left: 3px solid #3b82f6;
+}
+.suggestion-primary {
+    font-weight: 600;
+    color: #2563eb;
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+}
+.suggestion-category {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+.suggestion-description {
+    font-size: 0.75rem;
+    color: #4b5563;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Highlight matching text */
+.highlight {
+    background-color: #fef3c7;
+    font-weight: bold;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+</style>
+
+<div id="tg263-tooltip" class="hidden fixed bg-white border border-gray-300 shadow-lg rounded-md p-3 z-50 max-w-md">
+    <div class="flex items-center space-x-2 mb-1">
+        <p class="text-sm font-medium text-gray-900" id="tooltip-name"></p>
+        <span class="px-2 py-0.5 text-xs font-medium text-blue-600 bg-blue-100 rounded-full">TG263</span>
+    </div>
+    <p class="text-xs text-gray-600" id="tooltip-description"></p>
+    <div class="text-xs text-gray-500 mt-1">
+        <span id="tooltip-category"></span>
+    </div>
+</div>
+
+<!-- TG263 Suggestions -->
+<div id="tg263-suggestions-container" class="hidden fixed bg-white border border-gray-300 shadow-lg rounded-md overflow-hidden z-50" style="max-height: 300px; overflow-y: auto;">
+    <div id="tg263-suggestions-list">
+        <!-- Suggestions will be dynamically populated here -->
+    </div>
+</div>
+
+<!-- Template for suggestions -->
+<template id="suggestion-template">
+    <div class="suggestion-item p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-sm font-semibold text-blue-600"></div>
+                <div class="text-xs text-gray-500"></div>
+            </div>
+            <div class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"></div>
+        </div>
+        <div class="text-xs text-gray-600 mt-1"></div>
+    </div>
+</template>
+
+<script>
+// Initialize TG263 data with error handling
+let tg263Data = [];
+try {
+    tg263Data = JSON.parse('{{ tg263_data|escapejs }}');
+    console.log('TG263 data loaded successfully:', tg263Data.length, 'entries');
+} catch (error) {
+    console.error('Error loading TG263 data:', error);
+    tg263Data = [];
+}
+
+// Add form submit handler
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('harmonizeForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            submitFormAjax(document.activeElement);
+        });
+    }
+});
+
+// Function to submit form via AJAX
+function submitFormAjax(input) {
+    const form = input.closest('form');
+    if (!form) return;
+
+    // Get CSRF token from the form
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    // Create FormData with just the changed ROI
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', csrfToken);
+    formData.append(input.name, input.value);
+    formData.append('roi_id', input.name.split('_').pop());  // Extract ROI ID from input name
+    
+    // Show loading state
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.innerHTML = `
+        <svg class="animate-spin h-5 w-5 mr-2 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Saving...
+    `;
+    submitBtn.disabled = true;
+
+    // Make the AJAX request
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrfToken
+        },
+        credentials: 'same-origin'  // Important for CSRF
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
+            // Show success message
+            showNotification(data.message, 'success');
+            
+            // Update counts if provided
+            if (data.normalized_count > 0) {
+                showNotification(`${data.normalized_count} ROI name(s) normalized`, 'success');
+            }
+            if (data.updated_count > 0) {
+                showNotification(`${data.updated_count} ROI name(s) updated`, 'success');
+            }
+            
+            // Refresh the page after a short delay to show updated data
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            // Show error message
+            showNotification(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error updating ROI. Please try again.', 'error');
+    })
+    .finally(() => {
+        console.log('Request completed');
+        submitBtn.innerHTML = originalBtnText;
+        submitBtn.disabled = false;
+    });
+}
+
+// Function to show notification
+function showNotification(message, type = 'success') {
+    const messageDiv = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-100' : 'bg-red-100';
+    const borderColor = type === 'success' ? 'border-green-400' : 'border-red-400';
+    const textColor = type === 'success' ? 'text-green-700' : 'text-red-700';
+    
+    messageDiv.className = `fixed bottom-4 right-4 ${bgColor} border ${borderColor} ${textColor} px-4 py-3 rounded`;
+    messageDiv.innerHTML = `
+        <span class="block sm:inline">${message}</span>
+    `;
+    document.body.appendChild(messageDiv);
+    
+    // Remove message after 3 seconds
+    setTimeout(() => messageDiv.remove(), 3000);
+}
+
+// Function to update status badge
+function updateStatus(input) {
+    const row = input.closest('tr');
+    const statusBadge = row.querySelector('.status-badge');
+    const value = input.value.trim();
+    
+    // Check if value matches any TG263 name
+    const matchesTG263 = tg263Data.some(item =>
+        item.TG263_Primary_Name.toLowerCase() === value.toLowerCase()
+    );
+    
+    if (matchesTG263) {
+        statusBadge.textContent = 'TG263 Matched';
+        statusBadge.className = 'px-2 py-1 text-xs font-medium text-blue-600 bg-blue-100 rounded-full status-badge';
+        // Update data attribute for filtering
+        row.setAttribute('data-tg263-match', 'true');
+    } else if (value) {
+        statusBadge.textContent = 'Modified';
+        statusBadge.className = 'px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full status-badge';
+        // Update data attribute for filtering
+        row.setAttribute('data-tg263-match', 'false');
+    } else {
+        statusBadge.textContent = 'Unmodified';
+        statusBadge.className = 'px-2 py-1 text-xs font-medium text-yellow-600 bg-yellow-100 rounded-full status-badge';
+        // Update data attribute for filtering
+        row.setAttribute('data-tg263-match', 'false');
+    }
+}
+
+// Function to show suggestions dropdown
+function showSuggestions(input) {
+    const container = document.getElementById('tg263-suggestions-container');
+    const list = document.getElementById('tg263-suggestions-list');
+    const template = document.getElementById('suggestion-template');
+    const searchTerm = input.value.toLowerCase();
+    
+    // Debug: Check if tg263Data is available
+    console.log('TG263 Data available:', !!tg263Data);
+    console.log('TG263 Data length:', tg263Data ? tg263Data.length : 'undefined');
+    
+    // Clear previous suggestions
+    list.innerHTML = '';
+    
+    // Check if tg263Data exists and is valid
+    if (!tg263Data || !Array.isArray(tg263Data) || tg263Data.length === 0) {
+        console.warn('TG263 data is not available or empty');
+        container.classList.add('hidden');
+        return;
+    }
+    
+    // Filter and sort suggestions with error handling
+    const matches = tg263Data
+        .filter(item => {
+            // Add null checks for each property
+            if (!item || typeof item !== 'object') return false;
+            
+            const primaryName = (item.TG263_Primary_Name || '').toLowerCase();
+            const description = (item.Description || '').toLowerCase();
+            
+            return primaryName.includes(searchTerm) || description.includes(searchTerm);
+        })
+        .sort((a, b) => {
+            // Exact matches first, then partial matches
+            const aExact = (a.TG263_Primary_Name || '').toLowerCase() === searchTerm;
+            const bExact = (b.TG263_Primary_Name || '').toLowerCase() === searchTerm;
+            if (aExact && !bExact) return -1;
+            if (!aExact && bExact) return 1;
+            return 0;
+        })
+        .slice(0, 10); // Limit to 10 suggestions
+    
+    console.log('Found matches:', matches.length);
+    
+    // Add suggestions to dropdown
+    matches.forEach(item => {
+        const suggestionEl = template.content.cloneNode(true);
+        const itemEl = suggestionEl.querySelector('.suggestion-item');
+        
+        itemEl.querySelector('.text-blue-600').textContent = item.TG263_Primary_Name || 'Unknown';
+        itemEl.querySelector('.text-gray-500').textContent = item.Description || 'No description';
+        itemEl.querySelector('.bg-blue-100').textContent = item.Major_Category || 'Unknown';
+        
+        itemEl.addEventListener('click', () => {
+            input.value = item.TG263_Primary_Name || '';
+            container.classList.add('hidden');
+            
+            // Update status badge
+            updateStatus(input);
+            showTooltip(input);
+            
+            // Get the form and ROI ID
+            const form = document.getElementById('harmonizeForm');
+            const roiId = input.name.split('_').pop();
+            
+            // Create FormData with just this ROI's data
+            const formData = new FormData();
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            formData.append('csrfmiddlewaretoken', csrfToken);
+            formData.append('user_modified_name_' + roiId, item.TG263_Primary_Name || '');
+            formData.append('roi_id', roiId);
+            
+            // Submit AJAX request
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    if (data.normalized_count > 0) {
+                        showNotification(`${data.normalized_count} ROI name(s) normalized`, 'success');
+                    }
+                    if (data.updated_count > 0) {
+                        showNotification(`${data.updated_count} ROI name(s) updated`, 'success');
+                    }
+                    // Refresh the page after a short delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showNotification(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('An error occurred while saving changes', 'error');
+            });
+        });
+        
+        list.appendChild(itemEl);
+    });
+    
+    // Position and show dropdown
+    const rect = input.getBoundingClientRect();
+    container.style.width = rect.width + 'px';
+    container.style.left = rect.left + window.scrollX + 'px';
+    container.style.top = rect.bottom + window.scrollY + 'px';
+    container.classList.remove('hidden');
+}
+
+// Hide suggestions when clicking outside
+document.addEventListener('click', (e) => {
+    const container = document.getElementById('tg263-suggestions-container');
+    if (!e.target.closest('#tg263-suggestions-container') &&
+        !e.target.closest('input[name^="user_modified_name_"]')) {
+        container.classList.add('hidden');
+    }
+});
+
+// Show tooltip with TG263 details
+function showTooltip(input) {
+    
+    const tooltip = document.getElementById('tg263-tooltip');
+    const tooltipName = document.getElementById('tooltip-name');
+    const tooltipDescription = document.getElementById('tooltip-description');
+    const tooltipCategory = document.getElementById('tooltip-category');
+    
+    // Find exact match
+    const match = tg263Data.find(item =>
+        item.TG263_Primary_Name.toLowerCase() === input.value.toLowerCase()
+    );
+    
+    if (match) {
+        tooltipName.textContent = match.TG263_Primary_Name;
+        tooltipDescription.textContent = match.Description || 'No description available';
+        
+        // Show category information
+        const categories = [];
+        if (match.Major_Category) categories.push(match.Major_Category);
+        if (match.Minor_Category) categories.push(match.Minor_Category);
+        tooltipCategory.textContent = categories.length ? categories.join(' > ') : '';
+        
+        // Position tooltip near input
+        const rect = input.getBoundingClientRect();
+        const tooltipHeight = tooltip.offsetHeight;
+        const viewportHeight = window.innerHeight;
+        
+        // Check if tooltip would go off screen bottom
+        const bottomSpace = viewportHeight - rect.bottom;
+        if (bottomSpace < tooltipHeight + 10) {
+            // Position above input if not enough space below
+            tooltip.style.top = `${rect.top + window.scrollY - tooltipHeight - 5}px`;
+        } else {
+            // Position below input
+            tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        }
+        
+        tooltip.style.left = `${rect.left + window.scrollX}px`;
+        tooltip.classList.remove('hidden');
+    } else {
+        tooltip.classList.add('hidden');
+    }
+}
+
+// Hide tooltip when input loses focus
+function hideTooltip() {
+    document.getElementById('tg263-tooltip').classList.add('hidden');
+}
+
+// Highlight matching text in suggestions
+function highlightMatch(text, query) {
+    if (!query) return text;
+    
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    
+    if (lowerText.includes(lowerQuery)) {
+        const startIndex = lowerText.indexOf(lowerQuery);
+        const endIndex = startIndex + query.length;
+        
+        return text.substring(0, startIndex) +
+               '<span class="highlight">' +
+               text.substring(startIndex, endIndex) +
+               '</span>' +
+               text.substring(endIndex);
+    }
+    
+    return text;
+}
+
+// Handle keyboard navigation in dropdown
+document.addEventListener('keydown', function(e) {
+    const activeInput = document.activeElement;
+    if (!activeInput || activeInput.tagName !== 'INPUT' || !activeInput.name.startsWith('user_modified_name_')) {
+        return;
+    }
+    
+    const container = document.getElementById('tg263-suggestions-container');
+    if (container.classList.contains('hidden')) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            showSuggestions(activeInput);
+        }
+        return;
+    }
+    
+    const items = container.querySelectorAll('.suggestion-item');
+    const activeItem = container.querySelector('.suggestion-item.active');
+    let activeIndex = -1;
+    
+    if (activeItem) {
+        activeIndex = Array.from(items).indexOf(activeItem);
+    }
+    
+    // Handle arrow keys
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (activeIndex < items.length - 1) {
+            if (activeItem) activeItem.classList.remove('active');
+            items[activeIndex + 1].classList.add('active');
+            items[activeIndex + 1].scrollIntoView({ block: 'nearest' });
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (activeIndex > 0) {
+            if (activeItem) activeItem.classList.remove('active');
+            items[activeIndex - 1].classList.add('active');
+            items[activeIndex - 1].scrollIntoView({ block: 'nearest' });
+        }
+    } else if (e.key === 'Enter' && activeItem) {
+        e.preventDefault();
+        // Get TG263 name from active suggestion
+        const tg263Name = activeItem.querySelector('.text-blue-600').textContent;
+        activeInput.value = tg263Name;
+        
+        // Update UI
+        updateStatus(activeInput);
+        showTooltip(activeInput);
+        container.classList.add('hidden');
+        
+        // Submit AJAX request
+        const form = document.getElementById('harmonizeForm');
+        const roiId = activeInput.name.split('_').pop();
+        const formData = new FormData();
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        formData.append('csrfmiddlewaretoken', csrfToken);
+        formData.append('user_modified_name_' + roiId, tg263Name);
+        formData.append('roi_id', roiId);
+        
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(data.message, 'success');
+                if (data.normalized_count > 0) {
+                    showNotification(`${data.normalized_count} ROI name(s) normalized`, 'success');
+                }
+                if (data.updated_count > 0) {
+                    showNotification(`${data.updated_count} ROI name(s) updated`, 'success');
+                }
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showNotification(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showNotification('An error occurred while saving changes', 'error');
+        });
+    } else if (e.key === 'Escape') {
+        container.classList.add('hidden');
+    }
+});
+
+// Add input event listeners for suggestions
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('input[name^="user_modified_name_"]').forEach(input => {
+        if (!input.readOnly) {
+            input.addEventListener('input', () => showSuggestions(input));
+            input.addEventListener('focus', () => {
+                if (input.value) showSuggestions(input);
+            });
+            input.addEventListener('blur', () => {
+                // Small delay to allow click events on suggestions
+                setTimeout(() => {
+                    if (!document.activeElement.closest('#tg263-suggestions-container')) {
+                        document.getElementById('tg263-suggestions-container').classList.add('hidden');
+                    }
+                }, 200);
+            });
+        }
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('search');
+    const sortBySelect = document.getElementById('sortBy');
+    const sortOrderSelect = document.getElementById('sortOrder');
+    const tableBody = document.getElementById('roiTableBody');
+    const totalCount = document.getElementById('totalCount');
+    const visibleCount = document.getElementById('visibleCount');
+    
+    // Add event listeners for TG263 suggestions
+    document.querySelectorAll('input[name^="user_modified_name_"]').forEach(input => {
+        if (!input.readOnly) {
+            input.addEventListener('input', () => showSuggestions(input));
+            input.addEventListener('focus', () => {
+                if (input.value) showSuggestions(input);
+            });
+        }
+    });
+    
+    let currentFilter = 'all';
+    
+    // Search functionality
+    searchInput.addEventListener('input', function() {
+        filterAndSort();
+    });
+    
+    // Sort functionality
+    sortBySelect.addEventListener('change', function() {
+        filterAndSort();
+    });
+    
+    sortOrderSelect.addEventListener('change', function() {
+        filterAndSort();
+    });
+    
+    function filterAndSort() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const sortBy = sortBySelect.value;
+        const sortOrder = sortOrderSelect.value;
+        const rows = Array.from(tableBody.querySelectorAll('.roi-row'));
+        
+        // Filter rows
+        let visibleRows = rows.filter(row => {
+            const roiNumber = row.dataset.roiNumber;
+            const roiName = row.dataset.roiName;
+            const tg263Name = row.dataset.tg263Name;
+            const modifiedName = row.dataset.modifiedName;
+            
+            const matchesSearch = !searchTerm || 
+                roiNumber.includes(searchTerm) ||
+                roiName.includes(searchTerm) ||
+                tg263Name.includes(searchTerm) ||
+                modifiedName.includes(searchTerm);
+            
+            const matchesFilter = currentFilter === 'all' ||
+                (currentFilter === 'modified' && modifiedName.trim() !== '') ||
+                (currentFilter === 'unmodified' && modifiedName.trim() === '');
+            
+            return matchesSearch && matchesFilter;
+        });
+        
+        // Sort rows
+        visibleRows.sort((a, b) => {
+            let aValue, bValue;
+            
+            switch(sortBy) {
+                case 'roi_number':
+                    aValue = parseInt(a.dataset.roiNumber);
+                    bValue = parseInt(b.dataset.roiNumber);
+                    break;
+                case 'roi_name':
+                    aValue = a.dataset.roiName;
+                    bValue = b.dataset.roiName;
+                    break;
+                case 'tg263_primary_name':
+                    aValue = a.dataset.tg263Name;
+                    bValue = b.dataset.tg263Name;
+                    break;
+                case 'user_modified_name':
+                    aValue = a.dataset.modifiedName;
+                    bValue = b.dataset.modifiedName;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (typeof aValue === 'string') {
+                aValue = aValue.toLowerCase();
+                bValue = bValue.toLowerCase();
+            }
+            
+            if (sortOrder === 'desc') {
+                return bValue > aValue ? 1 : bValue < aValue ? -1 : 0;
+            } else {
+                return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+            }
+        });
+        
+        // Hide all rows first
+        rows.forEach(row => row.style.display = 'none');
+        
+        // Show filtered and sorted rows
+        visibleRows.forEach(row => row.style.display = '');
+        
+        // Update count
+        visibleCount.textContent = visibleRows.length;
+    }
+    
+    // Filter functions
+    window.clearFilters = function() {
+        searchInput.value = '';
+        sortBySelect.value = 'roi_number';
+        sortOrderSelect.value = 'asc';
+        currentFilter = 'all';
+        filterAndSort();
+    };
+    
+    window.showModifiedOnly = function() {
+        currentFilter = 'modified';
+        filterAndSort();
+    };
+    
+    window.showUnmodifiedOnly = function() {
+        currentFilter = 'unmodified';
+        filterAndSort();
+    };
+    
+    // Update status when input changes
+    window.updateStatus = function(input) {
+        const row = input.closest('tr');
+        const statusBadge = row.querySelector('.status-badge');
+        const value = input.value.trim();
+        const isTG263Match = row.dataset.tg263Match === 'true';
+        
+        if (isTG263Match) {
+            // Don't update status for TG263 matches
+            return;
+        }
+        
+        if (value) {
+            statusBadge.textContent = 'Modified';
+            statusBadge.className = 'px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full status-badge';
+            row.dataset.modifiedName = value.toLowerCase();
+        } else {
+            statusBadge.textContent = 'Unmodified';
+            statusBadge.className = 'px-2 py-1 text-xs font-medium text-yellow-600 bg-yellow-100 rounded-full status-badge';
+            row.dataset.modifiedName = '';
+        }
+    };
+    
+    // Table header sorting
+    window.sortTable = function(column) {
+        sortBySelect.value = column;
+        filterAndSort();
+    };
+});
+</script>
+
+{% endblock %}

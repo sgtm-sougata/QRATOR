@@ -1,0 +1,264 @@
+{% extends 'app/base.html' %}
+
+{% block content %}
+<div class="container-fluid px-4 py-5">
+    <!-- <h2 class="text-center mb-5">Selected ROIs Information</h2> -->
+
+    <!-- ROI Information Table -->
+    <div class="card shadow-sm mb-5">
+        <!-- <div class="card-header bg-white py-3">
+            <h3 class="card-title text-primary m-0 font-weight-bold">ROI Paths</h3>
+        </div> -->
+        <!-- <div class="card-body">
+            <table id="roiTable" class="table table-striped display nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Patient ID</th>
+                        <th>ROI Name</th>
+                        <th>CT NRRD Path</th>
+                        <th>ROI NRRD Path</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for info in roi_info_list %}
+                    <tr>
+                        <td>{{ info.patient_id }}</td>
+                        <td>{{ info.roi.roi_name }}</td>
+                        <td>{{ info.ct_nrrd_file_path }}</td>
+                        <td>{{ info.roi_nrrd_file_path }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div> -->
+
+    <!-- Radiomics Features Table -->
+    <div class="card shadow-sm">
+        <div class="card-header py-3">
+            <h3 class="card-title m-0 font-weight-bold">Radiomics Features</h3>
+        </div>
+        <div class="card-body">
+            <table id="featuresTable" class="table table-hover display nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        
+                        <th>Patient ID</th>
+                        <th>ROI Name</th>
+                        <th>Feature Class</th>
+                        <th>Feature</th>
+                        <th>Value</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for feature_data in feature_data_list %}
+                        {% for feature in feature_data.features %}
+                        <tr>
+                            <td>{{ feature_data.patient_id }}</td>
+                            <td>{{ feature_data.roi_name }}</td>
+                            <td>{{ feature.feature_class }}</td>
+                            <td>{{ feature.feature_name }}</td>
+                            <td>{{ feature.value|floatformat:4 }}</td>
+                            <td>{{ feature.description }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/searchpanes/2.0.0/css/searchPanes.dataTables.min.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/select/1.3.4/css/select.dataTables.min.css">
+
+<!-- jQuery + DataTables JS -->
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+<!-- JSZip required for Excel export button -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/searchpanes/2.0.0/js/dataTables.searchPanes.min.js"></script>
+<script src="https://cdn.datatables.net/select/1.3.4/js/dataTables.select.min.js"></script>
+
+<script>
+$(function() {
+  const table = $('#featuresTable').DataTable({
+    dom: 'PBfrtip',
+    paging: true,
+    pageLength: 25,
+    deferRender: true,
+    processing: true,
+    ordering: true,
+    searching: true,
+    responsive: true,
+    scrollX: true,
+    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, 'All']],
+    buttons: [
+      { extend: 'copy', className: 'custom-btn' },
+      { extend: 'csv', className: 'custom-btn' },
+      { extend: 'excel', className: 'custom-btn' }
+    ],
+    searchPanes: { viewTotal: true, columns: [0,1,2] },
+    columnDefs: [{ searchPanes: { show: true }, targets: [0,1,2] }],
+    language: { searchPanes: { title: { _: 'Filters Selected - %d', 0: 'No Filters Selected', 1: 'One Filter Selected' } } },
+    drawCallback: function() {
+      // Adjust columns after draw to keep widths correct with scrollX
+      this.api().columns.adjust();
+    }
+  });
+  // Safety: recalc on window resize
+  $(window).on('resize', () => table.columns.adjust());
+});
+</script>
+{% endblock %}
+
+<style>
+/* Academic color scheme and styling */
+.card {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    background-color:none;  
+    color: black;
+    border-bottom: none;
+}
+
+.card-title {
+    color: black;
+    font-size: 1.5rem;
+}
+
+/* Table styling */
+.table {
+    background-color: #ffffff;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 0,3px;  /* 0 for top/bottom, 5px for left/right */
+}
+
+/* Updated header styling with white background */
+table.dataTable thead th {
+    background-color: #ffffff;  /* White background */
+    color: #2c3e50;  /* Dark text color */
+    font-weight: 600;
+    padding: 12px;
+    border-bottom: 2px solid #2c3e50;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+}
+
+table.dataTable tbody tr {
+    background-color: #ffffff;
+    transition: background-color 0.2s;
+}
+
+table.dataTable tbody tr:nth-child(even) {
+    background-color: #f8f9fa;  /* Light gray for alternate rows */
+}
+
+table.dataTable tbody tr:hover {
+    background-color: #edf2f7;  /* Light blue hover effect */
+}
+
+/* Search and filter styling */
+.dataTables_filter input {
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    padding: 6px 12px;
+    background-color: #f8fafc;
+}
+
+.custom-btn {
+    background-color: #2c3e50 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 4px !important;
+    padding: 6px 12px !important;
+    margin: 0 4px !important;
+}
+
+.custom-btn:hover {
+    background-color: #34495e !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* SearchPanes styling */
+.dtsp-searchPane {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin: 8px;
+    padding: 12px;
+}
+
+.dtsp-searchPane .dtsp-search {
+    margin-bottom: 12px;
+}
+
+/* Pagination styling */
+.dataTables_paginate .paginate_button {
+    border-radius: 4px !important;
+    margin: 0 2px !important;
+}
+
+.dataTables_paginate .paginate_button.current {
+    background: white !important;
+    color: white !important;
+    border: none !important;
+}
+
+.dataTables_paginate .paginate_button:hover {
+    /* background: white !important; */
+    color: white !important;
+    border: none !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 0.5rem;
+    }
+    
+    .dataTables_wrapper {
+        padding: 50px;
+    }
+}
+
+/* Add or update DataTable wrapper styling */
+.dataTables_wrapper {
+    padding: 50px;
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+/* For better control, you can also style the table itself */
+#featuresTable {
+    margin: 0 5px;  /* 0 for top/bottom, 5px for left/right */
+}
+
+/* If you want to style all tables */
+.table {
+    background-color: #ffffff;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 0 5px;  /* 0 for top/bottom, 5px for left/right */
+}
+
+/* You might also want to adjust the card body padding */
+.card-body {
+    padding: 0.5rem;
+    margin: 0 5px;
+}
+</style>

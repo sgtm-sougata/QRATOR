@@ -1,0 +1,533 @@
+{% extends 'app/base.html' %}
+
+{% block content %}
+<!-- Messages -->
+{% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} px-4 py-3 rounded-md mb-2 {% if message.tags == 'error' %}bg-red-100 border border-red-400 text-red-700{% elif message.tags == 'success' %}bg-green-100 border border-green-400 text-green-700{% elif message.tags == 'warning' %}bg-yellow-100 border border-yellow-400 text-yellow-700{% else %}bg-blue-100 border border-blue-400 text-blue-700{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<!-- ZIP File Header -->
+<div class="bg-white rounded-lg shadow mb-6">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <div class="flex items-center space-x-3">
+                    <a href="{% url 'app:project_detail' upload_zip.project.id %}" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </a>
+                    <h3 class="text-lg font-semibold text-gray-900">{{ upload_zip.name }}</h3>
+                    <span class="px-2 py-1 text-xs font-medium text-blue-600 bg-blue-100 rounded-full">
+                        v{{ upload_zip.version }}
+                    </span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">{{ upload_zip.description }}</p>
+                <div class="flex items-center space-x-4 mt-2 text-xs text-gray-400">
+                    <span>Project: {{ upload_zip.project.name }}</span>
+                    <span>Size: {{ upload_zip.zip_file_size|filesizeformat }}</span>
+                    <span>Uploaded: {{ upload_zip.uploaded_at|date:"M d, Y H:i" }}</span>
+                    <span>By: {{ upload_zip.uploaded_by.get_full_name|default:upload_zip.uploaded_by.username }}</span>
+                </div>
+            </div>
+            <div class="flex space-x-2">
+                {% if upload_zip.extracted_path %}
+                    <!-- ZIP already extracted -->
+                    <span class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md cursor-not-allowed">
+                        ZIP already extracted
+                    </span>
+                {% else %}
+                    <!-- ZIP not extracted yet -->
+                    <a href="{% url 'app:extract_zip' upload_zip.id %}" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Please extract the ZIP
+                    </a>
+                    <!-- Download option still available -->
+                    <!-- <a href="{{ upload_zip.zip_file.url }}" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700" download>
+                        Download ZIP
+                    </a> -->
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Cards Section -->
+<div class="bg-white rounded-lg shadow mb-6">
+    <div class="p-6 border-b border-gray-200">
+        <h4 class="text-lg font-semibold text-gray-900">Data Categories</h4>
+        <p class="text-sm text-gray-500 mt-1">Select a category to view detailed information</p>
+    </div>
+    
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Patient Details Card -->
+            <div id="patient-details-card" class="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer category-card bg-white" data-target="patient-details-section">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex-1">
+                        <h5 class="text-lg font-medium text-gray-900">Patient Details</h5>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-medium text-blue-600 bg-blue-100 rounded-full">
+                        Details
+                    </span>
+                </div>
+                <p class="text-sm text-gray-500 mb-4">View comprehensive patient information including demographics and medical history.</p>
+                <div class="flex justify-end">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </div>
+            
+            <!-- Harmonization Card -->
+            <div id="harmonization-card" class="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer category-card bg-white" data-target="harmonization-section">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex-1">
+                        <h5 class="text-lg font-medium text-gray-900">Harmonization</h5>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full">
+                        Process
+                    </span>
+                </div>
+                <p class="text-sm text-gray-500 mb-4">View data harmonization details and standardization metrics across datasets.</p>
+                <div class="flex justify-end">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </div>
+            
+            <!-- Radiomics Features Card -->
+            <div id="radiomics-card" class="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer category-card bg-white" data-target="radiomics-section">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex-1">
+                        <h5 class="text-lg font-medium text-gray-900">Radiomics Features</h5>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full">
+                        Process
+                    </span>
+                </div>
+                <p class="text-sm text-gray-500 mb-4">Extract and analyze radiomics features from ROI data.</p>
+                <div class="flex justify-end">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data Sections -->
+<div id="patient-details-section" class="bg-white rounded-lg shadow mb-6 data-section hidden">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <h4 class="text-lg font-semibold text-gray-900">Patient Details</h4>
+                <p class="text-sm text-gray-500 mt-1">Comprehensive patient information</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                {% if upload_zip.extracted_path %}
+                    <a href="{% url 'app:patient_details' upload_zip.id %}" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                        Create Patient Directory
+                    </a>
+                {% endif %}
+                <button class="section-close-btn text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="p-6">
+        {% if patients %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient ID</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gender</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOB</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Institution</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for patient in patients %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ patient.patient_id }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ patient.patient_name }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ patient.patient_gender }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ patient.patient_dob }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ patient.institution_name }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No patient data found</h3>
+                <p class="mt-1 text-sm text-gray-500">This ZIP file doesn't contain any extracted patient data yet.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div id="harmonization-section" class="bg-white rounded-lg shadow mb-6 data-section hidden">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <h4 class="text-lg font-semibold text-gray-900">RTSTRUCT Harmonization</h4>
+                <p class="text-sm text-gray-500 mt-1">RT Structure Set data and harmonization status</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <a href="{% url 'app:batch_harmonize_rois' upload_zip.id %}" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
+                    Batch Harmonize All ROIs
+                </a>
+                <button class="section-close-btn text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="p-6">
+        {% if rtstructs %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient ID</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modality</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Study ID</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Study Date</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Harmonization Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for rtstruct in rtstructs %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {{ rtstruct.series_instance.series.study.patient.patient_id }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <span class="px-2 py-1 text-xs font-medium text-purple-600 bg-purple-100 rounded-full">
+                                    RTSTRUCT
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ rtstruct.series_instance.series.study.study_id }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ rtstruct.series_instance.series.study.study_date }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <a href="{% url 'app:harmonize_rtstruct_form' rtstruct.id %}" class="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                    Harmonize
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No RTSTRUCT data found</h3>
+                <p class="mt-1 text-sm text-gray-500">No RT Structure Sets have been processed for this ZIP file yet.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div id="radiomics-section" class="bg-white rounded-lg shadow mb-6 data-section hidden">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <h4 class="text-lg font-semibold text-gray-900">Radiomics</h4>
+                <p class="text-sm text-gray-500 mt-1">Extract and analyze radiomics features</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button class="section-close-btn text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="p-6">
+        <div class="flex space-x-4">
+            {% if not upload_zip.radiomics_data_prepared %}
+                <button id="openRadiomicsModal" 
+                   class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                    Radiomics Data Preparation
+                </button>
+                <a href="{% url 'app:select_rois_for_radiomics' upload_zip.id %}"
+                   class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
+                    Select ROI
+                </a>
+                <a href="{% url 'app:zip_extraction_sessions' zip_id=upload_zip.id %}"
+                   class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                    View Radiomics
+                </a>
+            {% else %}
+                <span class="px-4 py-2 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed text-sm">Radiomics Data Preparation Complete</span>
+                <a href="{% url 'app:select_rois_for_radiomics' upload_zip.id %}" 
+                   class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
+                    Select ROI
+                </a>
+                <a href="{% url 'app:zip_extraction_sessions' zip_id=upload_zip.id %}" 
+                   class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                    View Radiomics
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Radiomics Selection Modal -->
+{% if not upload_zip.radiomics_data_prepared %}
+<div id="radiomicsModal" class="fixed inset-0 z-50 hidden">
+  <div class="flex items-center justify-center min-h-screen px-4">
+    <div class="fixed inset-0 bg-black bg-opacity-50" id="radiomicsModalBackdrop"></div>
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl relative z-10">
+      <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-semibold">Select Structures for NRRD Conversion</h3>
+        <button id="closeRadiomicsModal" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <form method="post" action="{% url 'app:generate_nifti_for_selected_rois' upload_zip.id %}">
+        {% csrf_token %}
+        <div class="px-6 py-4 max-h-[60vh] overflow-y-auto">
+          {% if unique_roi_names %}
+          <div class="mb-3 flex items-center justify-end">
+            <div>
+              <label class="inline-flex items-center space-x-2 cursor-pointer">
+                <input id="toggleAllStructures" type="checkbox" class="form-checkbox h-4 w-4">
+                <span class="text-sm">Select all</span>
+              </label>
+            </div>
+          </div>
+          <div class="mb-3">
+            <input id="roiSearch" type="text" placeholder="Search structures..." class="w-full border rounded px-3 py-2 text-sm" />
+          </div>
+          <div id="roiList" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {% for name, info in unique_roi_names.items %}
+              <label class="flex items-center justify-between p-2 border rounded roi-item" data-name="{{ name|lower }}">
+                <span class="flex items-center space-x-2">
+                {% if not info.nifti_converted %}
+                  <input type="checkbox" name="selected_roi_names" value="{{ name }}" class="roi-checkbox h-4 w-4">
+                {% endif %}
+                <span class="text-sm">
+                  {{ name }}
+                  <span class="text-xs text-gray-500">({{ info.count }})</span>
+                </span>
+                </span>
+                <span class="ml-3 text-sm">
+                  {% if info.nifti_converted %}
+                    <span class="inline-flex items-center text-green-600" title="Converted">
+                      <svg class="w-3 h-3 mr-1" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><circle cx="4" cy="4" r="4"/></svg>
+                      Converted
+                    </span>
+                  {% else %}
+                    <span class="inline-flex items-center text-red-600" title="Pending">
+                      <svg class="w-3 h-3 mr-1" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><circle cx="4" cy="4" r="4"/></svg>
+                      Pending
+                    </span>
+                  {% endif %}
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-sm text-gray-500">No structures found.</div>
+          {% endif %}
+        </div>
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <button type="button" id="cancelRadiomicsModal" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Convert Selected to NRRD</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  </div>
+{% endif %}
+
+{% if radiomics_features %}
+<div class="p-6 border-t border-gray-200">
+    <h5 class="text-lg font-medium mb-4">Extracted Features</h5>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ROI Name</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Energy</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entropy</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mean</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variance</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for feature in radiomics_features %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ feature.roi_name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ feature.energy|floatformat:2 }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ feature.entropy|floatformat:2 }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ feature.mean|floatformat:2 }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ feature.variance|floatformat:2 }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if patients %}
+<!-- ZIP File Statistics -->
+<div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                </svg>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+                <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Total Patients</dt>
+                    <dd class="text-lg font-medium text-gray-900">{{ patients.count }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+                <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Studies</dt>
+                    <dd class="text-lg font-medium text-gray-900">
+                        {{ total_studies }}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+                <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">File Size</dt>
+                    <dd class="text-lg font-medium text-gray-900">{{ upload_zip.zip_file_size|filesizeformat }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const categoryCards = document.querySelectorAll('.category-card');
+    const dataSections = document.querySelectorAll('.data-section');
+    const closeButtons = document.querySelectorAll('.section-close-btn');
+
+    categoryCards.forEach(card => {
+        card.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-target');
+            const targetSection = document.getElementById(targetId);
+
+            dataSections.forEach(section => {
+                section.classList.add('hidden');
+            });
+
+            if (targetSection) {
+                targetSection.classList.remove('hidden');
+            }
+        });
+    });
+
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const section = button.closest('.data-section');
+            if (section) {
+                section.classList.add('hidden');
+            }
+        });
+    });
+
+    // Modal logic
+    const openBtn = document.getElementById('openRadiomicsModal');
+    const modal = document.getElementById('radiomicsModal');
+    const closeBtn = document.getElementById('closeRadiomicsModal');
+    const cancelBtn = document.getElementById('cancelRadiomicsModal');
+    const backdrop = document.getElementById('radiomicsModalBackdrop');
+    const toggleAll = document.getElementById('toggleAllStructures');
+    const searchInput = document.getElementById('roiSearch');
+
+    function openModal() { if (modal) modal.classList.remove('hidden'); }
+    function closeModal() { if (modal) modal.classList.add('hidden'); }
+
+    if (openBtn) openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+
+    if (toggleAll) {
+      toggleAll.addEventListener('change', function() {
+        document.querySelectorAll('#radiomicsModal .roi-checkbox').forEach(cb => {
+          cb.checked = toggleAll.checked;
+        });
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        const q = searchInput.value.trim().toLowerCase();
+        document.querySelectorAll('#radiomicsModal .roi-item').forEach(item => {
+          const name = item.getAttribute('data-name') || '';
+          if (!q || name.includes(q)) {
+            item.classList.remove('hidden');
+          } else {
+            item.classList.add('hidden');
+          }
+        });
+      });
+    }
+});
+</script>
+{% endblock %}

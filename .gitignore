@@ -1,0 +1,6 @@
+# Media files
+media/
+media/*
+venv/
+db.sqlite3
+logs/

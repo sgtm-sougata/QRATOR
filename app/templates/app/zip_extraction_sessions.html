@@ -1,0 +1,62 @@
+{% extends 'app/base.html' %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header Section -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Radiomics Extraction Sessions</h1>
+                <p class="text-sm text-gray-500 mt-1">Zip ID: {{ zip_id }}</p>
+            </div>
+            <a href="{% url 'app:zip_detail' zip_id=zip_id %}" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm">
+                Back to Zip Details
+            </a>
+        </div>
+    </div>
+
+    <!-- Extraction Sessions Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for session in session_data %}
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+            <div class="p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            Extraction #{{ session.extraction_id }}
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            {{ session.extraction_date|date:"F j, Y, g:i a" }}
+                        </p>
+                    </div>
+                    <span class="px-3 py-1 text-sm font-medium text-blue-600 bg-blue-100 rounded-full">
+                        {{ session.roi_count }} ROIs
+                    </span>
+                </div>
+                
+                <div class="mt-4 flex space-x-2">
+                    <a href="{% url 'app:extraction_session_details' zip_id=zip_id extraction_id=session.extraction_id %}" 
+                       class="flex-1 px-4 py-2 bg-blue-600 text-white text-center rounded-md hover:bg-blue-700 transition-colors">
+                        View Details
+                    </a>
+                    <a href="{% url 'app:show_results' zip_id=zip_id extraction_id=session.extraction_id %}" 
+                       class="flex-1 px-4 py-2 bg-green-600 text-white text-center rounded-md hover:bg-green-700 transition-colors">
+                        Show Results
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full">
+            <div class="text-center py-12 bg-white rounded-lg shadow-md">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No extraction sessions found</h3>
+                <p class="mt-1 text-sm text-gray-500">No radiomics features have been extracted for this zip file yet.</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %} 

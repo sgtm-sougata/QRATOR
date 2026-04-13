@@ -1,0 +1,593 @@
+{% extends 'app/base.html' %}
+
+{% block content %}
+<!-- Messages -->
+{% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} px-4 py-3 rounded-md mb-2 {% if message.tags == 'error' %}bg-red-100 border border-red-400 text-red-700{% elif message.tags == 'success' %}bg-green-100 border border-green-400 text-green-700{% elif message.tags == 'warning' %}bg-yellow-100 border border-yellow-400 text-yellow-700{% else %}bg-blue-100 border border-blue-400 text-blue-700{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<!-- TG263 Service Status -->
+{% if not tg263_available %}
+<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6" role="alert">
+    <p class="font-bold">TG263 Service Unavailable</p>
+    <p>Basic ROI name normalization will be used. TG263 matching features are currently unavailable.</p>
+</div>
+{% endif %}
+
+<!-- Header -->
+<div class="bg-white rounded-lg shadow mb-6">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <div class="flex items-center space-x-3">
+                    <a href="{% url 'app:zip_detail' zip_id %}" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </a>
+                    <h3 class="text-lg font-semibold text-gray-900">Batch ROI Harmonization</h3>
+                    <span class="px-2 py-1 text-xs font-medium text-purple-600 bg-purple-100 rounded-full">
+                        {{ unique_roi_names|length }} Unique ROIs
+                    </span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">ZIP: {{ upload_zip.name }} | Project: {{ upload_zip.project.name }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Filter Controls -->
+<div class="bg-white rounded-lg shadow mb-6">
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Search Box -->
+            <div>
+                <label for="search" class="block text-sm font-medium text-gray-700 mb-2">Search ROIs</label>
+                <div class="relative">
+                    <input type="text" id="search" placeholder="Search by ROI name..." 
+                           class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sort By -->
+            <div>
+                <label for="sortBy" class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                <select id="sortBy" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="roi_name">ROI Name</option>
+                    <option value="count">Occurrence Count</option>
+                    <option value="tg263_primary_name">TG263 Primary Name</option>
+                </select>
+            </div>
+            
+            <!-- Sort Order -->
+            <div>
+                <label for="sortOrder" class="block text-sm font-medium text-gray-700 mb-2">Sort Order</label>
+                <select id="sortOrder" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Filter Buttons -->
+        <div class="mt-4 flex flex-wrap gap-2">
+            <button onclick="clearFilters()" class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                Clear Filters
+            </button>
+            <button onclick="showMatchedOnly()" class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200">
+                Show Matched Only
+            </button>
+            <button onclick="showUnmatchedOnly()" class="px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-md hover:bg-yellow-200">
+                Show Unmatched Only
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Batch Harmonization Form -->
+<div class="bg-white rounded-lg shadow">
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+            <div>
+                <h4 class="text-lg font-semibold text-gray-900">Unique ROI Names</h4>
+                <p class="text-sm text-gray-500 mt-1">
+                    {% if tg263_available %}
+                    Edit the Modified Name field to harmonize ROI names. TG263 matching is available.
+                    {% else %}
+                    Edit the Modified Name field to harmonize ROI names. Basic normalization only (TG263 unavailable).
+                    {% endif %}
+                </p>
+            </div>
+            <div class="text-sm text-gray-500">
+                Total Unique ROIs: <span id="totalCount">{{ unique_roi_names|length }}</span> | 
+                Showing: <span id="visibleCount">{{ unique_roi_names|length }}</span>
+            </div>
+        </div>
+    </div>
+    
+    <form method="post" action="{% url 'app:batch_harmonize_rois' zip_id %}" id="batchHarmonizeForm">
+        {% csrf_token %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200" id="roiTable">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('roi_name')">
+                            ROI Name
+                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('count')">
+                            Occurrences
+                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Clean ROI Name
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onclick="sortTable('tg263_primary_name')">
+                            TG263 Primary Name
+                            <svg class="w-4 h-4 inline ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Modified Name
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="roiTableBody">
+                    {% for roi_name, roi_info in unique_roi_names.items %}
+                    <tr class="roi-row"
+                        data-roi-name="{{ roi_name|lower }}"
+                        data-count="{{ roi_info.count }}"
+                        data-clean-roi-name="{{ roi_info.clean_roi_name|lower }}"
+                        data-tg263-name="{{ roi_info.tg263_primary_name|lower }}"
+                        data-tg263-match="{{ roi_info.roi_of_clean_roi_name_match_tg263|yesno:'true,false' }}">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ roi_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ roi_info.count }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ roi_info.clean_roi_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ roi_info.tg263_primary_name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if roi_info.roi_of_clean_roi_name_match_tg263 %}
+                                <div class="flex items-center">
+                                    <input type="text" name="user_modified_name_{{ roi_name|slugify }}"
+                                           value="{{ roi_info.tg263_primary_name }}"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-700"
+                                           readonly>
+                                    <span class="ml-2 px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full">
+                                        Exact TG263 Match
+                                    </span>
+                                </div>
+                            {% else %}
+                                <div class="relative">
+                                    <div class="flex items-center">
+                                        <input type="text" name="user_modified_name_{{ roi_name|slugify }}"
+                                               value="{{ roi_info.tg263_primary_name }}"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                               placeholder="Enter TG263 primary name"
+                                               autocomplete="off"
+                                               oninput="showSuggestions(this)"
+                                               onchange="updateStatus(this)">
+                                        <div class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-gray-500 mt-1">Start typing to see TG263 primary name suggestions</div>
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if roi_info.roi_of_clean_roi_name_match_tg263 %}
+                                <span class="px-2 py-1 text-xs font-medium text-blue-600 bg-blue-100 rounded-full status-badge">
+                                    TG263 Matched
+                                </span>
+                            {% elif roi_info.tg263_primary_name %}
+                                <span class="px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full status-badge">
+                                    Modified
+                                </span>
+                            {% else %}
+                                <span class="px-2 py-1 text-xs font-medium text-yellow-600 bg-yellow-100 rounded-full status-badge">
+                                    Unmodified
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                            <p>No unique ROI names found.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if unique_roi_names %}
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+            <a href="{% url 'app:zip_detail' zip_id %}" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
+                Cancel
+            </a>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                Apply to All ROIs
+            </button>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<!-- TG263 Suggestions -->
+<style>
+.suggestion-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #e5e7eb;
+    transition: all 0.2s ease;
+}
+.suggestion-item:hover {
+    background-color: #f0f7ff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.suggestion-item.active {
+    background-color: #e0f2fe;
+    border-left: 3px solid #3b82f6;
+}
+.suggestion-primary {
+    font-weight: 600;
+    color: #2563eb;
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+}
+.suggestion-category {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+.suggestion-description {
+    font-size: 0.75rem;
+    color: #4b5563;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Highlight matching text */
+.highlight {
+    background-color: #fef3c7;
+    font-weight: bold;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+</style>
+
+<div id="tg263-tooltip" class="hidden fixed bg-white border border-gray-300 shadow-lg rounded-md p-3 z-50 max-w-md">
+    <div class="flex items-center space-x-2 mb-1">
+        <p class="text-sm font-medium text-gray-900" id="tooltip-name"></p>
+        <span class="px-2 py-0.5 text-xs font-medium text-blue-600 bg-blue-100 rounded-full">TG263</span>
+    </div>
+    <p class="text-xs text-gray-600" id="tooltip-description"></p>
+    <div class="text-xs text-gray-500 mt-1">
+        <span id="tooltip-category"></span>
+    </div>
+</div>
+
+<!-- TG263 Suggestions -->
+<div id="tg263-suggestions-container" class="hidden fixed bg-white border border-gray-300 shadow-lg rounded-md overflow-hidden z-50" style="max-height: 300px; overflow-y: auto;">
+    <div id="tg263-suggestions-list">
+        <!-- Suggestions will be dynamically populated here -->
+    </div>
+</div>
+
+<!-- Template for suggestions -->
+<template id="suggestion-template">
+    <div class="suggestion-item p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-sm font-semibold text-blue-600"></div>
+                <div class="text-xs text-gray-500"></div>
+            </div>
+            <div class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"></div>
+        </div>
+        <div class="text-xs text-gray-600 mt-1"></div>
+    </div>
+</template>
+
+<script>
+// Initialize TG263 data with error handling
+let tg263Data = [];
+try {
+    tg263Data = JSON.parse('{{ tg263_data|escapejs }}');
+    console.log('TG263 data loaded successfully:', tg263Data.length, 'entries');
+} catch (error) {
+    console.error('Error loading TG263 data:', error);
+    tg263Data = [];
+}
+
+// Function to filter table rows
+function filterTable() {
+    const searchText = document.getElementById('search').value.toLowerCase();
+    const rows = document.querySelectorAll('#roiTableBody tr.roi-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        const roiName = row.getAttribute('data-roi-name');
+        const cleanRoiName = row.getAttribute('data-clean-roi-name');
+        const tg263Name = row.getAttribute('data-tg263-name');
+        
+        if (
+            roiName.includes(searchText) || 
+            cleanRoiName.includes(searchText) || 
+            tg263Name.includes(searchText)
+        ) {
+            row.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            row.classList.add('hidden');
+        }
+    });
+    
+    document.getElementById('visibleCount').textContent = visibleCount;
+}
+
+// Function to sort table
+function sortTable(column) {
+    const tbody = document.getElementById('roiTableBody');
+    const rows = Array.from(tbody.querySelectorAll('tr.roi-row'));
+    const sortOrder = document.getElementById('sortOrder').value;
+    
+    rows.sort((a, b) => {
+        let aValue = a.getAttribute(`data-${column}`);
+        let bValue = b.getAttribute(`data-${column}`);
+        
+        // Handle numeric sorting for count
+        if (column === 'count') {
+            aValue = parseInt(aValue);
+            bValue = parseInt(bValue);
+            return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+        
+        // String comparison for other columns
+        return sortOrder === 'asc' 
+            ? aValue.localeCompare(bValue) 
+            : bValue.localeCompare(aValue);
+    });
+    
+    // Reorder the rows
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+// Function to clear filters
+function clearFilters() {
+    document.getElementById('search').value = '';
+    document.getElementById('sortBy').value = 'roi_name';
+    document.getElementById('sortOrder').value = 'asc';
+    
+    const rows = document.querySelectorAll('#roiTableBody tr.roi-row');
+    rows.forEach(row => row.classList.remove('hidden'));
+    
+    document.getElementById('visibleCount').textContent = rows.length;
+    
+    // Sort by ROI name ascending
+    sortTable('roi_name');
+}
+
+// Function to show only matched ROIs
+function showMatchedOnly() {
+    const rows = document.querySelectorAll('#roiTableBody tr.roi-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        const tg263Match = row.getAttribute('data-tg263-match');
+        
+        if (tg263Match === 'true') {
+            row.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            row.classList.add('hidden');
+        }
+    });
+    
+    document.getElementById('visibleCount').textContent = visibleCount;
+}
+
+// Function to show only unmatched ROIs
+function showUnmatchedOnly() {
+    const rows = document.querySelectorAll('#roiTableBody tr.roi-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        const tg263Match = row.getAttribute('data-tg263-match');
+        
+        if (tg263Match === 'false') {
+            row.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            row.classList.add('hidden');
+        }
+    });
+    
+    document.getElementById('visibleCount').textContent = visibleCount;
+}
+
+// Function to update status badge
+function updateStatus(input) {
+    const row = input.closest('tr');
+    const statusBadge = row.querySelector('.status-badge');
+    const value = input.value.trim();
+    
+    // Check if value matches any TG263 name
+    const matchesTG263 = tg263Data.some(item =>
+        item.TG263_Primary_Name.toLowerCase() === value.toLowerCase()
+    );
+    
+    if (matchesTG263) {
+        statusBadge.textContent = 'TG263 Matched';
+        statusBadge.className = 'px-2 py-1 text-xs font-medium text-blue-600 bg-blue-100 rounded-full status-badge';
+        // Update data attribute for filtering
+        row.setAttribute('data-tg263-match', 'true');
+    } else if (value) {
+        statusBadge.textContent = 'Modified';
+        statusBadge.className = 'px-2 py-1 text-xs font-medium text-green-600 bg-green-100 rounded-full status-badge';
+        // Update data attribute for filtering
+        row.setAttribute('data-tg263-match', 'false');
+    } else {
+        statusBadge.textContent = 'Unmodified';
+        statusBadge.className = 'px-2 py-1 text-xs font-medium text-yellow-600 bg-yellow-100 rounded-full status-badge';
+        // Update data attribute for filtering
+        row.setAttribute('data-tg263-match', 'false');
+    }
+}
+
+// Function to show suggestions dropdown
+function showSuggestions(input) {
+    const container = document.getElementById('tg263-suggestions-container');
+    const list = document.getElementById('tg263-suggestions-list');
+    const template = document.getElementById('suggestion-template');
+    const searchTerm = input.value.toLowerCase();
+    
+    // Debug: Check if tg263Data is available
+    console.log('TG263 Data available:', !!tg263Data);
+    console.log('TG263 Data length:', tg263Data ? tg263Data.length : 'undefined');
+    
+    // Clear previous suggestions
+    list.innerHTML = '';
+    
+    // Check if tg263Data exists and is valid
+    if (!tg263Data || !Array.isArray(tg263Data) || tg263Data.length === 0) {
+        console.warn('TG263 data is not available or empty');
+        container.classList.add('hidden');
+        return;
+    }
+    
+    // Filter and sort suggestions with error handling
+    const matches = tg263Data
+        .filter(item => {
+            // Add null checks for each property
+            if (!item || typeof item !== 'object') return false;
+            
+            const primaryName = (item.TG263_Primary_Name || '').toLowerCase();
+            const description = (item.Description || '').toLowerCase();
+            
+            return primaryName.includes(searchTerm) || description.includes(searchTerm);
+        })
+        .sort((a, b) => {
+            // Exact matches first, then partial matches
+            const aExact = (a.TG263_Primary_Name || '').toLowerCase() === searchTerm;
+            const bExact = (b.TG263_Primary_Name || '').toLowerCase() === searchTerm;
+            if (aExact && !bExact) return -1;
+            if (!aExact && bExact) return 1;
+            return 0;
+        })
+        .slice(0, 10); // Limit to 10 suggestions
+    
+    console.log('Found matches:', matches.length);
+    
+    // Add suggestions to dropdown
+    matches.forEach(item => {
+        const suggestionEl = template.content.cloneNode(true);
+        const itemEl = suggestionEl.querySelector('.suggestion-item');
+        
+        itemEl.querySelector('.text-blue-600').textContent = item.TG263_Primary_Name || 'Unknown';
+        itemEl.querySelector('.text-gray-500').textContent = item.Description || 'No description';
+        itemEl.querySelector('.bg-blue-100').textContent = item.Major_Category || 'Unknown';
+        
+        itemEl.addEventListener('click', () => {
+            input.value = item.TG263_Primary_Name || '';
+            container.classList.add('hidden');
+            
+            // Update status badge
+            updateStatus(input);
+        });
+        
+        list.appendChild(itemEl);
+    });
+    
+    // Position and show the suggestions container (fixed to viewport)
+    if (matches.length > 0) {
+        const rect = input.getBoundingClientRect();
+        container.style.width = `${rect.width}px`;
+        container.style.left = `${rect.left}px`;
+        container.style.top = `${rect.bottom + 4}px`; // small offset below input
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Search input
+    const searchInput = document.getElementById('search');
+    if (searchInput) {
+        searchInput.addEventListener('input', filterTable);
+    }
+    
+    // Sort by dropdown
+    const sortBySelect = document.getElementById('sortBy');
+    if (sortBySelect) {
+        sortBySelect.addEventListener('change', function() {
+            sortTable(this.value);
+        });
+    }
+    
+    // Sort order dropdown
+    const sortOrderSelect = document.getElementById('sortOrder');
+    if (sortOrderSelect) {
+        sortOrderSelect.addEventListener('change', function() {
+            sortTable(document.getElementById('sortBy').value);
+        });
+    }
+    
+    // Close suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+        const container = document.getElementById('tg263-suggestions-container');
+        if (!container.contains(e.target) && e.target.tagName !== 'INPUT') {
+            container.classList.add('hidden');
+        }
+    });
+    // Hide suggestions on scroll/resize to avoid misplacement
+    window.addEventListener('scroll', function() {
+        const container = document.getElementById('tg263-suggestions-container');
+        container.classList.add('hidden');
+    }, { passive: true });
+    window.addEventListener('resize', function() {
+        const container = document.getElementById('tg263-suggestions-container');
+        container.classList.add('hidden');
+    });
+    // Ensure suggestions appear on focus as well as input typing
+    const modifiedInputs = document.querySelectorAll('input[name^="user_modified_name_"]');
+    modifiedInputs.forEach(inp => {
+        inp.addEventListener('focus', function() { showSuggestions(inp); });
+    });
+    
+    // Initial sort
+    sortTable('roi_name');
+});
+</script>
+
+{% endblock %}
