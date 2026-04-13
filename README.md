@@ -82,5 +82,7 @@ Key dependencies include:
 - scikit-learn (≥1.0.0)
 - pydicom
 
+[![DOI](https://zenodo.org/badge/1209066507.svg)](https://doi.org/10.5281/zenodo.19551677)
+
 For a complete list of dependencies, see `requirements.txt`.
 
