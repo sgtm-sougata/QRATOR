@@ -85,4 +85,5 @@ Key dependencies include:
 For a complete list of dependencies, see `requirements.txt`.
 
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19551677.svg)](https://doi.org/10.5281/zenodo.19551677)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19551678.svg)](https://doi.org/10.5281/zenodo.19551678)
+
