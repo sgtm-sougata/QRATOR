@@ -84,14 +84,3 @@ Key dependencies include:
 
 For a complete list of dependencies, see `requirements.txt`.
 
-## Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-[Specify your license here, e.g., MIT, GPL, etc.]
-
-## Contact
-[Your Name/Organization] - [Your Email]
-
-## Acknowledgments
-- [List any acknowledgments, inspirations, or resources you'd like to mention]
